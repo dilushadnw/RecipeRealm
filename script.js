@@ -1,5 +1,5 @@
-// Mock Recipe Database
-const recipes = [
+// Fallback recipes used when API has no data or is unavailable.
+const fallbackRecipes = [
   {
     id: 1,
     title: "Pasta Primavera",
@@ -124,13 +124,38 @@ const recipes = [
 // App State and Controller
 const app = {
   currentPage: "home",
-  recipes: [...recipes],
+  recipes: [...fallbackRecipes],
 
-  init() {
+  async init() {
     this.cacheDOM();
     this.bindEvents();
+    await this.loadRecipesFromServer();
     this.renderAll();
     this.initSlider();
+  },
+
+  async loadRecipesFromServer() {
+    try {
+      const response = await fetch("api.php?action=recipes", {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      if (
+        payload &&
+        payload.ok &&
+        Array.isArray(payload.recipes) &&
+        payload.recipes.length > 0
+      ) {
+        this.recipes = payload.recipes;
+      }
+    } catch (error) {
+      console.warn("Recipe API unavailable. Using local fallback data.", error);
+    }
   },
 
   cacheDOM() {
@@ -361,7 +386,7 @@ const app = {
     this.navigateTo("recipe-details");
   },
 
-  handleRecipeSubmit() {
+  async handleRecipeSubmit() {
     const title = document.getElementById("recipe-title").value;
     const category = document.getElementById("recipe-category").value;
     const ingredients = document
@@ -380,31 +405,37 @@ const app = {
       return;
     }
 
-    const newRecipe = {
-      id: this.recipes.length + 1,
-      title,
-      category,
-      description: "A new user-submitted recipe.",
-      time: "30 mins", // Default for demo
-      servings: "4",
-      difficulty: "Easy",
-      image:
-        "https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=800&auto=format&fit=crop",
-      ingredients,
-      instructions,
-      featured: false,
-      trending: false,
-      userCreated: true,
-    };
+    try {
+      const response = await fetch("api.php?action=add_recipe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title,
+          category,
+          ingredients,
+          instructions,
+          email,
+        }),
+      });
 
-    this.recipes.push(newRecipe);
-    alert("Success! Your recipe has been submitted to the Realm.");
+      const payload = await response.json();
+      if (!response.ok || !payload.ok || !payload.recipe) {
+        throw new Error(payload.error || "Failed to submit recipe.");
+      }
 
-    // Log to console as per spec
-    console.log("New Recipe Submitted:", newRecipe);
+      this.recipes.unshift(payload.recipe);
+      alert("Success! Your recipe has been submitted to the Realm.");
+      console.log("New Recipe Submitted:", payload.recipe);
 
-    this.recipeForm.reset();
-    this.navigateTo("discovery");
+      this.recipeForm.reset();
+      this.navigateTo("discovery");
+    } catch (error) {
+      alert(
+        `Recipe submit failed: ${error.message}. Please ensure WAMP MySQL is running.`,
+      );
+    }
   },
 
   renderProfile() {
@@ -481,7 +512,9 @@ const app = {
 
 // Initialize App
 document.addEventListener("DOMContentLoaded", () => {
-  app.init();
+  app.init().catch((error) => {
+    console.error("App initialization failed:", error);
+  });
 
   // Mobile Nav Toggle
   const menuToggle = document.querySelector(".menu-toggle");
