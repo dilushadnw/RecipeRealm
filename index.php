@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recipe Realm | Discover World of Flavors</title>
     <meta name="description" content="Recipe Realm is your digital cookbook for discovering and sharing amazing recipes from around the globe.">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -21,6 +21,7 @@
             <li><a href="#" class="nav-link active" data-page="home">Home</a></li>
             <li><a href="#" class="nav-link" data-page="discovery">Recipes</a></li>
             <li><a href="#" class="nav-link" data-page="add-recipe">Add Recipe</a></li>
+            <li><a href="contact.php" class="nav-link">Contact Us</a></li>
             <li><a href="#" class="nav-link" data-page="profile">Profile</a></li>
         </ul>
         <div class="nav-actions">
@@ -254,6 +255,6 @@
         <p class="copyright">&copy; 2026 Recipe Realm. All rights reserved. Built for University Project.</p>
     </footer>
 
-    <script src="script.js"></script>
+    <script src="js/script.js"></script>
 </body>
 </html>
