@@ -155,11 +155,35 @@
         <!-- USER PROFILE PAGE VIEW -->
         <section id="profile" class="page-view">
             <div class="profile-header">
-                <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?q=80&w=200&h=200&auto=format&fit=crop" alt="Jane Doe" class="profile-img">
+                <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?q=80&w=200&h=200&auto=format&fit=crop" alt="Profile" class="profile-img" id="profile-avatar">
                 <div class="profile-info">
-                    <h2>Jane Doe</h2>
-                    <p><i class="fas fa-utensils"></i> Home Cook | London, UK</p>
-                    <p style="margin-top: 10px;">Exploring the world, one recipe at a time. Passionate about plant-based cooking.</p>
+                    <h2 id="profile-name">Jane Doe</h2>
+                    <p><i class="fas fa-utensils"></i> <span id="profile-role">Home Cook</span> | <span id="profile-location">Location not set</span></p>
+                    <p style="margin-top: 10px;" id="profile-bio">Add a short bio to personalize your profile.</p>
+                    <button class="btn view-btn" id="profile-edit-toggle" type="button" style="margin: 6px 0 10px;">Edit Profile</button>
+                </div>
+            </div>
+
+            <div id="profile-edit" class="form-container" style="display: none; margin-top: 20px;">
+                <div class="form-group">
+                    <label for="profile-name-input">Name</label>
+                    <input type="text" id="profile-name-input" placeholder="Update name">
+                </div>
+                <div class="form-group">
+                    <label for="profile-address">Address</label>
+                    <input type="text" id="profile-address" placeholder="Your city or address">
+                </div>
+                <div class="form-group">
+                    <label for="profile-bio-input">Bio</label>
+                    <textarea id="profile-bio-input" placeholder="Tell us about you"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Choose Avatar</label>
+                    <div id="profile-avatar-options" style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn submit-btn" id="profile-save" type="button">Save Profile</button>
+                    <button class="btn view-btn" id="profile-cancel" type="button">Cancel</button>
                 </div>
             </div>
             

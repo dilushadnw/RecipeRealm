@@ -126,6 +126,12 @@ const app = {
   currentPage: "home",
   recipes: [...fallbackRecipes],
   currentUser: null,
+  avatarOptions: [
+    "https://api.dicebear.com/7.x/adventurer/svg?seed=chef",
+    "https://api.dicebear.com/7.x/adventurer/svg?seed=spice",
+    "https://api.dicebear.com/7.x/adventurer/svg?seed=olive",
+    "https://api.dicebear.com/7.x/adventurer/svg?seed=basil",
+  ],
 
   async init() {
     this.cacheDOM();
@@ -195,6 +201,22 @@ const app = {
     this.showLoginBtn = document.getElementById("show-login");
     this.loginButton = document.getElementById("login-button");
     this.authStatus = document.getElementById("auth-status");
+    this.profileName = document.getElementById("profile-name");
+    this.profileNameInput = document.getElementById("profile-name-input");
+    this.profileEditWrap = document.getElementById("profile-edit");
+    this.profileEditToggle = document.getElementById("profile-edit-toggle");
+    this.profileCancelBtn = document.getElementById("profile-cancel");
+    this.profileAvatar = document.getElementById("profile-avatar");
+    this.profileRole = document.getElementById("profile-role");
+    this.profileLocation = document.getElementById("profile-location");
+    this.profileBio = document.getElementById("profile-bio");
+    this.profileAddress = document.getElementById("profile-address");
+    this.profileBioInput = document.getElementById("profile-bio-input");
+    this.profileAvatarOptions = document.getElementById(
+      "profile-avatar-options",
+    );
+    this.profileSaveBtn = document.getElementById("profile-save");
+    this.recentViewedList = document.getElementById("recent-viewed-list");
   },
 
   bindEvents() {
@@ -267,6 +289,24 @@ const app = {
         this.toggleAuthForms("login");
       });
     }
+
+    if (this.profileEditToggle) {
+      this.profileEditToggle.addEventListener("click", () => {
+        this.toggleProfileEdit(true);
+      });
+    }
+
+    if (this.profileCancelBtn) {
+      this.profileCancelBtn.addEventListener("click", () => {
+        this.toggleProfileEdit(false);
+      });
+    }
+
+    if (this.profileSaveBtn) {
+      this.profileSaveBtn.addEventListener("click", () => {
+        this.handleProfileSave();
+      });
+    }
   },
 
   toggleAuthForms(mode) {
@@ -286,6 +326,136 @@ const app = {
       this.authStatus.textContent = this.currentUser
         ? `Logged in as ${this.currentUser.username}`
         : "";
+    }
+
+    if (this.profileName) {
+      this.profileName.textContent = this.currentUser
+        ? this.currentUser.username
+        : "Guest";
+    }
+
+    if (this.profileNameInput) {
+      this.profileNameInput.value = this.currentUser
+        ? this.currentUser.username
+        : "";
+    }
+
+    if (this.profileAvatar) {
+      this.profileAvatar.src = this.currentUser?.avatar
+        ? this.currentUser.avatar
+        : "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?q=80&w=200&h=200&auto=format&fit=crop";
+    }
+
+    if (this.profileRole) {
+      this.profileRole.textContent = this.currentUser?.role || "Home Cook";
+    }
+
+    if (this.profileLocation) {
+      this.profileLocation.textContent = this.currentUser?.address ||
+        "Location not set";
+    }
+
+    if (this.profileBio) {
+      this.profileBio.textContent = this.currentUser?.bio ||
+        "Add a short bio to personalize your profile.";
+    }
+
+    if (this.profileAddress) {
+      this.profileAddress.value = this.currentUser?.address || "";
+    }
+
+    if (this.profileBioInput) {
+      this.profileBioInput.value = this.currentUser?.bio || "";
+    }
+
+    this.renderAvatarOptions();
+
+    if (this.profileEditToggle && this.profileEditWrap) {
+      const canEdit = Boolean(this.currentUser);
+      this.profileEditToggle.style.display = canEdit ? "inline-flex" : "none";
+      this.profileEditWrap.style.display = "none";
+    }
+  },
+
+  renderAvatarOptions() {
+    if (!this.profileAvatarOptions) return;
+    const current = this.currentUser?.avatar || "";
+
+    this.profileAvatarOptions.innerHTML = "";
+    this.avatarOptions.forEach((url, index) => {
+      const label = document.createElement("label");
+      label.style.display = "flex";
+      label.style.alignItems = "center";
+      label.style.gap = "8px";
+
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "profile-avatar";
+      input.value = url;
+      input.checked = current === url || (!current && index === 0);
+
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "Avatar";
+      img.style.width = "48px";
+      img.style.height = "48px";
+      img.style.borderRadius = "50%";
+      img.style.border = "1px solid #eee";
+
+      label.appendChild(input);
+      label.appendChild(img);
+      this.profileAvatarOptions.appendChild(label);
+    });
+  },
+
+  toggleProfileEdit(show) {
+    if (!this.profileEditWrap) return;
+    this.profileEditWrap.style.display = show ? "block" : "none";
+    if (this.profileEditToggle) {
+      this.profileEditToggle.style.display = show ? "none" : "inline-flex";
+    }
+  },
+
+  async handleProfileSave() {
+    if (!this.currentUser) {
+      alert("Please login to edit your profile.");
+      return;
+    }
+
+    const username = this.profileNameInput?.value.trim() ||
+      this.currentUser.username;
+    const address = this.profileAddress?.value.trim() || "";
+    const bio = this.profileBioInput?.value.trim() || "";
+    const avatar = this.profileAvatarOptions
+      ? this.profileAvatarOptions.querySelector("input[name='profile-avatar']:checked")
+          ?.value
+      : "";
+
+    if (!username) {
+      alert("Please enter a valid name.");
+      return;
+    }
+
+    try {
+      const response = await fetch("api.php?action=update_profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, address, bio, avatar }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.ok || !payload.user) {
+        throw new Error(payload.error || "Profile update failed.");
+      }
+
+      this.currentUser = payload.user;
+      this.updateAuthUI();
+      this.toggleProfileEdit(false);
+      alert("Profile updated successfully.");
+    } catch (error) {
+      alert(`Profile update failed: ${error.message}`);
     }
   },
 
@@ -422,6 +592,8 @@ const app = {
     const recipe = this.recipes.find((r) => r.id === id);
     if (!recipe) return;
 
+    this.addRecentlyViewed(recipe);
+
     this.detailsContainer.innerHTML = `
             <div class="details-hero">
                 <img src="${recipe.image}" alt="${recipe.title}">
@@ -471,6 +643,50 @@ const app = {
         `;
 
     this.navigateTo("recipe-details");
+  },
+
+  addRecentlyViewed(recipe) {
+    const stored = JSON.parse(localStorage.getItem("recentlyViewed") || "[]");
+    const filtered = stored.filter((item) => item.id !== recipe.id);
+    const entry = {
+      id: recipe.id,
+      title: recipe.title,
+      image: recipe.image,
+      time: recipe.time,
+    };
+    const updated = [entry, ...filtered].slice(0, 6);
+    localStorage.setItem("recentlyViewed", JSON.stringify(updated));
+    this.renderRecentlyViewed();
+  },
+
+  renderRecentlyViewed() {
+    if (!this.recentViewedList) return;
+
+    const items = JSON.parse(localStorage.getItem("recentlyViewed") || "[]");
+    this.recentViewedList.innerHTML = "";
+
+    if (items.length === 0) {
+      this.recentViewedList.innerHTML =
+        '<li style="opacity: 0.7;">No recent recipes yet.</li>';
+      return;
+    }
+
+    items.forEach((item) => {
+      const li = document.createElement("li");
+      li.style.minWidth = "180px";
+      li.style.background = "#fff";
+      li.style.borderRadius = "12px";
+      li.style.boxShadow = "0 6px 18px rgba(0,0,0,0.08)";
+      li.style.padding = "10px";
+      li.innerHTML = `
+        <img src="${item.image}" alt="${item.title}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 10px;">
+        <div style="margin-top: 8px; font-weight: 600;">${item.title}</div>
+        <div style="font-size: 0.85rem; color: #636e72; margin-top: 4px;">
+          <i class="far fa-clock"></i> ${item.time}
+        </div>
+      `;
+      this.recentViewedList.appendChild(li);
+    });
   },
 
   async handleRecipeSubmit() {
@@ -612,18 +828,47 @@ const app = {
     }
   },
 
-  renderProfile() {
-    this.myRecipesGrid.innerHTML = "";
-    const userRecipes = this.recipes.filter((r) => r.userCreated);
+  async loadMyRecipes() {
+    if (!this.myRecipesGrid) return;
 
-    if (userRecipes.length === 0) {
+    if (!this.currentUser) {
       this.myRecipesGrid.innerHTML =
-        '<p style="grid-column: 1/-1;">You haven\'t created any recipes yet.</p>';
-    } else {
-      userRecipes.forEach((recipe) => {
+        '<p style="grid-column: 1/-1;">Please login to see your recipes.</p>';
+      return;
+    }
+
+    try {
+      const response = await fetch("api.php?action=my_recipes", {
+        method: "GET",
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Failed to load recipes.");
+      }
+
+      const data = Array.isArray(payload.recipes) ? payload.recipes : [];
+      this.myRecipesGrid.innerHTML = "";
+
+      if (data.length === 0) {
+        this.myRecipesGrid.innerHTML =
+          '<p style="grid-column: 1/-1;">You have not added any recipes yet.</p>';
+        return;
+      }
+
+      data.forEach((recipe) => {
         this.myRecipesGrid.appendChild(this.createRecipeCard(recipe));
       });
+    } catch (error) {
+      this.myRecipesGrid.innerHTML =
+        '<p style="grid-column: 1/-1;">Unable to load your recipes right now.</p>';
     }
+  },
+
+  renderProfile() {
+    this.updateAuthUI();
+    this.loadMyRecipes();
+    this.renderRecentlyViewed();
   },
 
   initSlider() {

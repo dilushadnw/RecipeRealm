@@ -32,6 +32,9 @@ function ensure_database(): void
         username VARCHAR(50) UNIQUE NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
+        address VARCHAR(200) NULL,
+        bio VARCHAR(255) NULL,
+        avatar VARCHAR(255) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -165,7 +168,7 @@ function find_user_by_identifier(mysqli $conn, string $identifier): ?array
         return null;
     }
 
-    $query = 'SELECT id, username, email, password FROM users WHERE email = ? OR username = ? LIMIT 1';
+    $query = 'SELECT id, username, email, password, address, bio, avatar FROM users WHERE email = ? OR username = ? LIMIT 1';
     $stmt = $conn->prepare($query);
     $stmt->bind_param('ss', $identifier, $identifier);
     $stmt->execute();
@@ -176,9 +179,34 @@ function find_user_by_identifier(mysqli $conn, string $identifier): ?array
     return $user;
 }
 
+function ensure_user_columns(mysqli $conn): void
+{
+    $columns = [
+        'address' => 'ALTER TABLE users ADD COLUMN address VARCHAR(200) NULL',
+        'bio' => 'ALTER TABLE users ADD COLUMN bio VARCHAR(255) NULL',
+        'avatar' => 'ALTER TABLE users ADD COLUMN avatar VARCHAR(255) NULL',
+    ];
+
+    $check = $conn->prepare('SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ? LIMIT 1');
+    $schema = DB_NAME;
+    $table = 'users';
+
+    foreach ($columns as $column => $ddl) {
+        $check->bind_param('sss', $schema, $table, $column);
+        $check->execute();
+        $result = $check->get_result();
+        if ($result->num_rows === 0) {
+            $conn->query($ddl);
+        }
+    }
+
+    $check->close();
+}
+
 try {
     ensure_database();
     $conn = db_connect();
+    ensure_user_columns($conn);
 
     $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
@@ -220,7 +248,12 @@ try {
             json_response(['ok' => false, 'error' => 'Ingredients and instructions cannot be empty.'], 422);
         }
 
-        $userId = get_or_create_user_id($conn, $email);
+        $sessionUser = $_SESSION['user'] ?? null;
+        if ($sessionUser) {
+            $userId = (int)$sessionUser['id'];
+        } else {
+            $userId = get_or_create_user_id($conn, $email);
+        }
 
         $insert = $conn->prepare('INSERT INTO recipes (title, ingredients, instructions, user_id) VALUES (?, ?, ?, ?)');
         $insert->bind_param('sssi', $title, $ingredientsText, $instructionsText, $userId);
@@ -308,6 +341,9 @@ try {
             'id' => (int)$user['id'],
             'username' => (string)$user['username'],
             'email' => (string)$user['email'],
+            'address' => $user['address'] ?? null,
+            'bio' => $user['bio'] ?? null,
+            'avatar' => $user['avatar'] ?? null,
         ];
 
         json_response([
@@ -321,6 +357,74 @@ try {
         json_response([
             'ok' => true,
             'user' => $user,
+        ]);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'my_recipes') {
+        $user = $_SESSION['user'] ?? null;
+        if (!$user) {
+            json_response(['ok' => false, 'error' => 'Not authenticated.'], 401);
+        }
+
+        $query = 'SELECT r.id, r.title, r.ingredients, r.instructions, u.username FROM recipes r INNER JOIN users u ON r.user_id = u.id WHERE r.user_id = ? ORDER BY r.created_at DESC';
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param('i', $userId);
+        $userId = (int)$user['id'];
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $rows = [];
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = map_recipe($row);
+        }
+        $stmt->close();
+
+        json_response(['ok' => true, 'recipes' => $rows]);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update_profile') {
+        $user = $_SESSION['user'] ?? null;
+        if (!$user) {
+            json_response(['ok' => false, 'error' => 'Not authenticated.'], 401);
+        }
+
+        $payload = json_decode(file_get_contents('php://input') ?: '', true);
+        if (!is_array($payload)) {
+            json_response(['ok' => false, 'error' => 'Invalid JSON payload.'], 400);
+        }
+
+        $username = trim((string)($payload['username'] ?? ''));
+        $address = trim((string)($payload['address'] ?? ''));
+        $bio = trim((string)($payload['bio'] ?? ''));
+        $avatar = trim((string)($payload['avatar'] ?? ''));
+        if ($username === '') {
+            json_response(['ok' => false, 'error' => 'Username is required.'], 422);
+        }
+
+        $check = $conn->prepare('SELECT id FROM users WHERE username = ? AND id != ? LIMIT 1');
+        $check->bind_param('si', $username, $userId);
+        $userId = (int)$user['id'];
+        $check->execute();
+        $exists = $check->get_result()->num_rows > 0;
+        $check->close();
+
+        if ($exists) {
+            json_response(['ok' => false, 'error' => 'Username already in use.'], 409);
+        }
+
+        $update = $conn->prepare('UPDATE users SET username = ?, address = ?, bio = ?, avatar = ? WHERE id = ?');
+        $update->bind_param('ssssi', $username, $address, $bio, $avatar, $userId);
+        $update->execute();
+        $update->close();
+
+        $_SESSION['user']['username'] = $username;
+        $_SESSION['user']['address'] = $address;
+        $_SESSION['user']['bio'] = $bio;
+        $_SESSION['user']['avatar'] = $avatar;
+
+        json_response([
+            'ok' => true,
+            'user' => $_SESSION['user'],
         ]);
     }
 
