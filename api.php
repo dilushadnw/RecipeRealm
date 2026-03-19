@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
+session_start();
+
 header('Content-Type: application/json; charset=utf-8');
 
 const DB_HOST = '127.0.0.1';
@@ -156,6 +158,24 @@ function get_or_create_user_id(mysqli $conn, string $email): int
     return (int)$newId;
 }
 
+function find_user_by_identifier(mysqli $conn, string $identifier): ?array
+{
+    $identifier = trim($identifier);
+    if ($identifier === '') {
+        return null;
+    }
+
+    $query = 'SELECT id, username, email, password FROM users WHERE email = ? OR username = ? LIMIT 1';
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param('ss', $identifier, $identifier);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc() ?: null;
+    $stmt->close();
+
+    return $user;
+}
+
 try {
     ensure_database();
     $conn = db_connect();
@@ -220,6 +240,98 @@ try {
         }
 
         json_response(['ok' => true, 'recipe' => map_recipe($recipeRow)], 201);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'register') {
+        $payload = json_decode(file_get_contents('php://input') ?: '', true);
+        if (!is_array($payload)) {
+            json_response(['ok' => false, 'error' => 'Invalid JSON payload.'], 400);
+        }
+
+        $username = trim((string)($payload['username'] ?? ''));
+        $email = strtolower(trim((string)($payload['email'] ?? '')));
+        $password = (string)($payload['password'] ?? '');
+
+        if ($username === '' || $email === '' || $password === '') {
+            json_response(['ok' => false, 'error' => 'Username, email and password are required.'], 422);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            json_response(['ok' => false, 'error' => 'Please enter a valid email.'], 422);
+        }
+
+        if (strlen($password) < 6) {
+            json_response(['ok' => false, 'error' => 'Password must be at least 6 characters.'], 422);
+        }
+
+        if (find_user_by_identifier($conn, $username) || find_user_by_identifier($conn, $email)) {
+            json_response(['ok' => false, 'error' => 'Username or email already exists.'], 409);
+        }
+
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        $insert = $conn->prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)');
+        $insert->bind_param('sss', $username, $email, $passwordHash);
+        $insert->execute();
+        $newId = (int)$insert->insert_id;
+        $insert->close();
+
+        json_response([
+            'ok' => true,
+            'user' => [
+                'id' => $newId,
+                'username' => $username,
+                'email' => $email,
+            ],
+        ], 201);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'login') {
+        $payload = json_decode(file_get_contents('php://input') ?: '', true);
+        if (!is_array($payload)) {
+            json_response(['ok' => false, 'error' => 'Invalid JSON payload.'], 400);
+        }
+
+        $identifier = trim((string)($payload['identifier'] ?? ''));
+        $password = (string)($payload['password'] ?? '');
+
+        if ($identifier === '' || $password === '') {
+            json_response(['ok' => false, 'error' => 'Username/email and password are required.'], 422);
+        }
+
+        $user = find_user_by_identifier($conn, $identifier);
+        if (!$user || !password_verify($password, (string)$user['password'])) {
+            json_response(['ok' => false, 'error' => 'Invalid credentials.'], 401);
+        }
+
+        session_regenerate_id(true);
+        $_SESSION['user'] = [
+            'id' => (int)$user['id'],
+            'username' => (string)$user['username'],
+            'email' => (string)$user['email'],
+        ];
+
+        json_response([
+            'ok' => true,
+            'user' => $_SESSION['user'],
+        ]);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'session') {
+        $user = $_SESSION['user'] ?? null;
+        json_response([
+            'ok' => true,
+            'user' => $user,
+        ]);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'logout') {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        json_response(['ok' => true]);
     }
 
     json_response(['ok' => false, 'error' => 'Route not found.'], 404);

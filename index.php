@@ -27,7 +27,7 @@
             <div class="search-icon" id="search-trigger">
                 <i class="fas fa-search"></i>
             </div>
-            <button class="btn login-btn" data-page="login">Login</button>
+            <button class="btn login-btn" id="login-button" data-page="login">Login</button>
             <div class="menu-toggle">
                 <i class="fas fa-bars"></i>
             </div>
@@ -182,6 +182,7 @@
         <section id="login" class="page-view">
             <div class="login-container">
                 <h2>Welcome Back</h2>
+                <p id="auth-status" style="margin-bottom: 16px; color: var(--text-muted);"></p>
                 <form id="login-form">
                     <div class="form-group">
                         <label for="login-user">Username or Email</label>
@@ -193,6 +194,24 @@
                     </div>
                     <button type="submit" class="btn submit-btn">Login</button>
                     <a href="#" class="forgot-pw">Forgot Password?</a>
+                    <a href="#" class="forgot-pw" id="show-register">Create New Account</a>
+                </form>
+
+                <form id="register-form" style="display: none; margin-top: 24px;">
+                    <div class="form-group">
+                        <label for="register-username">Username</label>
+                        <input type="text" id="register-username" placeholder="Choose a username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-email">Email</label>
+                        <input type="email" id="register-email" placeholder="you@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-pass">Password</label>
+                        <input type="password" id="register-pass" placeholder="Minimum 6 characters" required>
+                    </div>
+                    <button type="submit" class="btn submit-btn">Create Account</button>
+                    <a href="#" class="forgot-pw" id="show-login">Back to Login</a>
                 </form>
             </div>
         </section>

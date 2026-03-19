@@ -125,11 +125,13 @@ const fallbackRecipes = [
 const app = {
   currentPage: "home",
   recipes: [...fallbackRecipes],
+  currentUser: null,
 
   async init() {
     this.cacheDOM();
     this.bindEvents();
     await this.loadRecipesFromServer();
+    await this.loadSession();
     this.renderAll();
     this.initSlider();
   },
@@ -151,7 +153,21 @@ const app = {
         Array.isArray(payload.recipes) &&
         payload.recipes.length > 0
       ) {
-        this.recipes = payload.recipes;
+        const serverRecipes = payload.recipes;
+        const hasFeatured = serverRecipes.some((recipe) => recipe.featured);
+        const hasTrending = serverRecipes.some((recipe) => recipe.trending);
+
+        this.recipes = serverRecipes;
+
+        if (!hasFeatured || !hasTrending) {
+          const fallbackExtras = fallbackRecipes.filter((recipe) => {
+            if (recipe.featured && !hasFeatured) return true;
+            if (recipe.trending && !hasTrending) return true;
+            return false;
+          });
+
+          this.recipes = [...this.recipes, ...fallbackExtras];
+        }
       }
     } catch (error) {
       console.warn("Recipe API unavailable. Using local fallback data.", error);
@@ -174,12 +190,22 @@ const app = {
     this.searchInput = document.getElementById("recipe-search");
     this.filterBtns = document.querySelectorAll(".filter-btn");
     this.loginForm = document.getElementById("login-form");
+    this.registerForm = document.getElementById("register-form");
+    this.showRegisterBtn = document.getElementById("show-register");
+    this.showLoginBtn = document.getElementById("show-login");
+    this.loginButton = document.getElementById("login-button");
+    this.authStatus = document.getElementById("auth-status");
   },
 
   bindEvents() {
     // Navigation
     this.navLinks.forEach((link) => {
       link.addEventListener("click", (e) => {
+        if (link === this.loginButton && this.currentUser) {
+          e.preventDefault();
+          this.handleLogout();
+          return;
+        }
         e.preventDefault();
         const pageId = link.getAttribute("data-page");
         this.navigateTo(pageId);
@@ -217,9 +243,70 @@ const app = {
     if (this.loginForm) {
       this.loginForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        alert("Login successful! Welcome back, Jane.");
-        this.navigateTo("home");
+        this.handleLoginSubmit();
       });
+    }
+
+    if (this.registerForm) {
+      this.registerForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleRegisterSubmit();
+      });
+    }
+
+    if (this.showRegisterBtn) {
+      this.showRegisterBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.toggleAuthForms("register");
+      });
+    }
+
+    if (this.showLoginBtn) {
+      this.showLoginBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.toggleAuthForms("login");
+      });
+    }
+  },
+
+  toggleAuthForms(mode) {
+    if (!this.loginForm || !this.registerForm) return;
+
+    const showLogin = mode === "login";
+    this.loginForm.style.display = showLogin ? "block" : "none";
+    this.registerForm.style.display = showLogin ? "none" : "block";
+  },
+
+  updateAuthUI() {
+    if (this.loginButton) {
+      this.loginButton.textContent = this.currentUser ? "Logout" : "Login";
+    }
+
+    if (this.authStatus) {
+      this.authStatus.textContent = this.currentUser
+        ? `Logged in as ${this.currentUser.username}`
+        : "";
+    }
+  },
+
+  async loadSession() {
+    try {
+      const response = await fetch("api.php?action=session", {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      if (payload && payload.ok && payload.user) {
+        this.currentUser = payload.user;
+      }
+
+      this.updateAuthUI();
+    } catch (error) {
+      console.warn("Session check failed.", error);
     }
   },
 
@@ -435,6 +522,93 @@ const app = {
       alert(
         `Recipe submit failed: ${error.message}. Please ensure WAMP MySQL is running.`,
       );
+    }
+  },
+
+  async handleLoginSubmit() {
+    const identifier = document.getElementById("login-user").value.trim();
+    const password = document.getElementById("login-pass").value;
+
+    if (!identifier || !password) {
+      alert("Please enter your username/email and password.");
+      return;
+    }
+
+    try {
+      const response = await fetch("api.php?action=login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ identifier, password }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Login failed.");
+      }
+
+      this.currentUser = payload.user;
+      this.updateAuthUI();
+      alert(`Login successful! Welcome back, ${payload.user.username}.`);
+      this.loginForm.reset();
+      this.navigateTo("home");
+    } catch (error) {
+      alert(`Login failed: ${error.message}`);
+    }
+  },
+
+  async handleRegisterSubmit() {
+    const username = document.getElementById("register-username").value.trim();
+    const email = document.getElementById("register-email").value.trim();
+    const password = document.getElementById("register-pass").value;
+
+    if (!username || !email || !password) {
+      alert("Please fill all account fields.");
+      return;
+    }
+
+    try {
+      const response = await fetch("api.php?action=register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Account creation failed.");
+      }
+
+      alert("Account created successfully. You can now login.");
+      this.registerForm.reset();
+      this.toggleAuthForms("login");
+    } catch (error) {
+      alert(`Account creation failed: ${error.message}`);
+    }
+  },
+
+  async handleLogout() {
+    try {
+      const response = await fetch("api.php?action=logout", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      if (payload && payload.ok) {
+        this.currentUser = null;
+        this.updateAuthUI();
+        alert("Logged out successfully.");
+        this.navigateTo("home");
+      }
+    } catch (error) {
+      alert("Logout failed. Please try again.");
     }
   },
 
